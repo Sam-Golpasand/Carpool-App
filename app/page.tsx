@@ -1,42 +1,71 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { use, useState } from 'react'
 import { Input } from "@/components/ui/input"
 import axios, { AxiosResponse } from 'axios';
 import { Button } from "@/components/ui/button";
-
-
+import { get } from 'http';
 
 export default function page() {
 
   const [licensePlate, setLicensePlate] = useState<string>('')
   const [kmL, setKmL] = useState<number | null>(null)
+  const [showOwnAddress, setShowOwnAddress] = useState<boolean>(false)
+  const [addresses, setAddresses] = useState<string[]>([])
+  const [origin, setOrigin] = useState<string>("")
+  const [destination, setDestination] = useState<string>("")
 
 
-  const handleLicensePlateChange = (e: any) => {
+  function handleLicensePlateChange(e: any) {
     setLicensePlate(e.target.value)
   }
-  const apiKey = process.env.NEXT_PUBLIC_SynBaseAPIKey;
+  const apiKey: string = process.env.NEXT_PUBLIC_SynBaseAPIKey || "";
+  const googleApiKey: string = process.env.NEXT_PUBLIC_GoogleAPIKey || "";
 
-  const handleSubmit = (e: any) => {
+  function getDistance(origin: string, addresses: string[], apiKey: string = googleApiKey) {
+    const addressesString = addresses.join('|');
+    let distanceArray: number[] = [];
+    
+    axios.get(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${addressesString}&key=${apiKey}`)
+      .then((response) => {
+        response.data.rows[0].elements.forEach((element: any, index: number) => {
+          const distanceValue = element.distance.value;
+          distanceArray.push(distanceValue);
+        });
+        
+        if (distanceArray.length > 0) {
+          return distanceArray;
+        } 
+      })
+      .catch((error) => {
+        console.error('Error fetching distance matrix:', error);
+      });
+  }
+  
+
+  const x = getDistance("Tranevej 24, 2650 Hvidovre", ["Kettegård Alle 30, 2650 Hvidovre", "Carl Jacobsens Vej 25, 2500 København"])
+
+
+  function handleSubmit(e: any) {
     e.preventDefault()
 
 
     axios.get(`https://api.synsbasen.dk/v1/vehicles/registration/${licensePlate}?expand[]=engine`, {
       headers: {
         'Authorization': apiKey
-    }
-    })
-    .then((response) => {
-      console.log(response.data.data.engine.fuel_efficiency)
-      if (response.data.data.engine)  {
-        setKmL(response.data.data.engine.fuel_efficiency)
-      } else {
-        console.error('No data found')
       }
-
     })
-    .catch(error => console.error(error));
+      .then((response) => {
+        console.log(response.data.data.engine.fuel_efficiency)
+        if (response.data.data.engine) {
+          setKmL(response.data.data.engine.fuel_efficiency)
+          setShowOwnAddress(true)
+        } else {
+          console.error('No data found')
+        }
+
+      })
+      .catch(error => console.error(error));
   }
 
   return (
@@ -62,6 +91,22 @@ export default function page() {
               {kmL ? <span>{kmL} km/L</span> : null}
             </div>
           </div>
+          {showOwnAddress ?
+            <div className='relative'>
+              <p className='text-center m-4 mt-8'>Now input your own address</p>
+              <Input
+                value={licensePlate}
+                onChange={handleLicensePlateChange}
+                type="text"
+                id="license-plate"
+                placeholder="Enter your license plate"
+                className="pr-20 bg-[#1f1f1f] border-[#4b2a7a] focus:border-[#7a4ab2] focus:ring-[#7a4ab2]"
+              />
+            </div>
+            :
+            null
+          }
+
           <Button
             type="submit"
             className="w-full bg-[#7a4ab2] text-primary-foreground hover:bg-[#5c3784] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7a4ab2] disabled:pointer-events-none disabled:opacity-50"
