@@ -1,55 +1,91 @@
 "use client"
 
-import React, { use, useState } from 'react'
+import React, { useState } from 'react'
 import { Input } from "@/components/ui/input"
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 import { Button } from "@/components/ui/button";
-import { get } from 'http';
 
-export default function page() {
-
+export default function Page() {
   const [licensePlate, setLicensePlate] = useState<string>('')
   const [kmL, setKmL] = useState<number | null>(null)
   const [showOwnAddress, setShowOwnAddress] = useState<boolean>(false)
-  const [addresses, setAddresses] = useState<string[]>([])
-  const [origin, setOrigin] = useState<string>("")
-  const [destination, setDestination] = useState<string>("")
+  const [addresses, setAddresses] = useState<string[]>([''])
+  const [totalDetourDistance, setTotalDetourDistance] = useState<number | null>(null);
+  const [distanceDifference, setDistanceDifference] = useState<number | null>(null);
+  const [liter, setLiter] = useState<number | null>(null);
 
-
-  function handleLicensePlateChange(e: any) {
+  function handleLicensePlateChange(e: React.ChangeEvent<HTMLInputElement>) {
     setLicensePlate(e.target.value)
   }
+
+  function handleAddressChange(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const newAddresses = [...addresses];
+    newAddresses[index] = e.target.value;
+    setAddresses(newAddresses);
+  }
+
+  function addAddressField() {
+    setAddresses([...addresses, '']);
+  }
+
   const apiKey: string = process.env.NEXT_PUBLIC_SynBaseAPIKey || "";
   const googleApiKey: string = process.env.NEXT_PUBLIC_GoogleAPIKey || "";
 
-  function getDistance(origin: string, addresses: string[], apiKey: string = googleApiKey) {
-    const addressesString = addresses.join('|');
-    let distanceArray: number[] = [];
-    
-    axios.get(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${addressesString}&key=${apiKey}`)
-      .then((response) => {
-        response.data.rows[0].elements.forEach((element: any, index: number) => {
-          const distanceValue = element.distance.value;
-          distanceArray.push(distanceValue);
-        });
-        
-        if (distanceArray.length > 0) {
-          return distanceArray;
-        } 
-      })
-      .catch((error) => {
-        console.error('Error fetching distance matrix:', error);
+  async function getDistance(origin: string, destinations: string[]): Promise<number> {
+    const destinationString = destinations.join('|');
+  
+    try {
+      const response = await axios.get(`/api/distance`, {
+        params: {
+          origin,
+          destinations: destinationString,
+          apiKey: googleApiKey,
+        }
       });
+  
+      const totalDistance = response.data.rows[0].elements.reduce(
+        (acc: number, element: any) => acc + element.distance.value,
+        0
+      );
+      return totalDistance;
+    } catch (error) {
+      console.error('Error fetching distance matrix:', error);
+      return 0;
+    }
   }
   
+  function calculateLiter(distanceDifference: number | null, kmL: number | null) {
+    if (distanceDifference !== null && kmL !== null) {
+      setLiter(distanceDifference / kmL)
+      console.log(liter)
+    }
+  }
 
-  const x = getDistance("Tranevej 24, 2650 Hvidovre", ["Kettegård Alle 30, 2650 Hvidovre", "Carl Jacobsens Vej 25, 2500 København"])
+  async function calculateDetourDistance() {
+    if (addresses.length < 2 && showOwnAddress) {
+      console.error("At least 2 addresses are needed.");
+      return;
+    }
 
 
-  function handleSubmit(e: any) {
-    e.preventDefault()
+    const firstAddress = addresses[0];
+    const lastAddress = addresses[addresses.length - 1];
 
+    // Calculate the direct distance from the first to the last address
+    const originToDestinationDistance = await getDistance(firstAddress, [lastAddress]);
 
+    // Calculate the total distance to all destinations (including detours)
+    const originToDestinationWithDetoursDistance = await getDistance(firstAddress, addresses);
+
+    // Calculate the difference
+    const distanceDiff = originToDestinationWithDetoursDistance - originToDestinationDistance;
+
+    setTotalDetourDistance(originToDestinationWithDetoursDistance / 1000); // converting meters to km
+    setDistanceDifference(distanceDiff / 1000); // converting meters to km
+    calculateLiter(distanceDifference, kmL);
+  }
+
+  function getKmL() {
     axios.get(`https://api.synsbasen.dk/v1/vehicles/registration/${licensePlate}?expand[]=engine`, {
       headers: {
         'Authorization': apiKey
@@ -63,10 +99,10 @@ export default function page() {
         } else {
           console.error('No data found')
         }
-
       })
       .catch(error => console.error(error));
   }
+
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f0f0f] text-white">
@@ -77,7 +113,7 @@ export default function page() {
             Get your friends to drive you around guilt free and fair.
           </p>
         </div>
-        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-4">
           <div className="relative">
             <Input
               value={licensePlate}
@@ -91,28 +127,50 @@ export default function page() {
               {kmL ? <span>{kmL} km/L</span> : null}
             </div>
           </div>
-          {showOwnAddress ?
+          {showOwnAddress && (
             <div className='relative'>
-              <p className='text-center m-4 mt-8'>Now input your own address</p>
-              <Input
-                value={licensePlate}
-                onChange={handleLicensePlateChange}
-                type="text"
-                id="license-plate"
-                placeholder="Enter your license plate"
-                className="pr-20 bg-[#1f1f1f] border-[#4b2a7a] focus:border-[#7a4ab2] focus:ring-[#7a4ab2]"
-              />
+              <p className='text-center m-4 mt-8'>Now input addresses</p>
+              {addresses.map((address, index) => (
+                <div key={index} className="relative mb-4">
+                  <Input
+                    value={address}
+                    onChange={(e) => handleAddressChange(index, e)}
+                    type="text"
+                    placeholder={`Enter address ${index + 1}`}
+                    className="pr-20 bg-[#1f1f1f] border-[#4b2a7a] focus:border-[#7a4ab2] focus:ring-[#7a4ab2]"
+                  />
+                </div>
+              ))}
+              <Button
+                type="button"
+                className="w-full bg-[#4b2a7a] text-primary-foreground hover:bg-[#7a4ab2] focus-visible:outline-none"
+                onClick={addAddressField}
+              >
+                Add More Addresses
+              </Button>
             </div>
-            :
-            null
-          }
+          )}
 
           <Button
-            type="submit"
-            className="w-full bg-[#7a4ab2] text-primary-foreground hover:bg-[#5c3784] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7a4ab2] disabled:pointer-events-none disabled:opacity-50"
+            type="button"
+            className="w-full bg-[#7a4ab2] text-primary-foreground hover:bg-[#5c3784] focus-visible:outline-none"
+            onClick={showOwnAddress ? calculateDetourDistance : getKmL}
           >
-            Calculate
+            Calculate Detour Distance
           </Button>
+          <div className='text-center'>
+          {totalDetourDistance !== null && (
+            <div className="mt-4">
+              <p>Total Distance (with detours): {totalDetourDistance} km</p>
+            </div>
+          )}
+          {distanceDifference !== null && (
+            <div className="mt-4">
+              <p>Distance Difference: {distanceDifference} km</p>
+              <p>Price: {liter ? (liter * 13.19).toFixed(2) : null} kr</p>
+            </div>
+          )}
+          </div>
         </form>
       </div>
     </div>
