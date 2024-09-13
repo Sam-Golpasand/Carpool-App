@@ -13,9 +13,11 @@ export default function Page() {
   const [initials, setInitials] = useState<string[]>(['']);
   const [distancesPerPerson, setDistancesPerPerson] = useState<any[]>([]);
   const [totalCostPerPerson, setTotalCostPerPerson] = useState<any[]>([]);
+  const [fuelType, setFuelType] = useState<string>('Benzin');
   const [loading, setLoading] = useState<boolean>(false);
 
-  const fuelPrice = 13.19;
+  const fuelPriceBenzin = 13.19;
+  const fuelPriceDiesel = 12.19;
 
   function handleLicensePlateChange(e: React.ChangeEvent<HTMLInputElement>) {
     setLicensePlate(e.target.value);
@@ -33,6 +35,7 @@ export default function Page() {
     setInitials(newInitials);
   }
 
+  // Add a new address field
   function addAddressField() {
     setAddresses([...addresses, '']);
     setInitials([...initials, '']);
@@ -44,6 +47,7 @@ export default function Page() {
   async function getDistance(origin: string, destinations: string[]): Promise<number> {
     const destinationString = destinations.join('|');
     try {
+      // Fetch the distance matrix from Google Maps API
       const response = await axios.get(`/api/distance`, {
         params: {
           origin,
@@ -51,6 +55,7 @@ export default function Page() {
           apiKey: googleApiKey,
         }
       });
+      // Sum up the total distance from the origin to all destinations
       const totalDistance = response.data.rows[0].elements.reduce(
         (acc: number, element: any) => acc + element.distance.value,
         0
@@ -63,6 +68,7 @@ export default function Page() {
   }
 
   async function calculateCosts() {
+    // Check if there are at least 2 addresses
     if (addresses.length < 2) {
       console.error("At least 2 addresses are needed.");
       return;
@@ -82,19 +88,20 @@ export default function Page() {
 
       totalDistanceDriven += totalDistanceForPerson;
 
-      // Assign initials for the first address and all others except the final destination
+      // Assign initials for the addresses
       distances.push({
-        initials: initials[i], // Now includes initials for the first address
-        totalDistanceForPerson // only consider distance to the destination
+        initials: initials[i],
+        totalDistanceForPerson 
       });
+
 
       // Calculate the cost for each person based on km/L
       const litersUsed = totalDistanceForPerson / (kmL || 1);
-      const costForPerson = litersUsed * fuelPrice;
+      const costForPerson = litersUsed * (fuelType === "Benzin" ? fuelPriceBenzin : fuelPriceDiesel);
 
       totalCostPerPerson.push({
         initials: initials[i],
-        cost: costForPerson.toFixed(2) // round to 2 decimal places
+        cost: costForPerson.toFixed(2) 
       });
     }
 
@@ -104,10 +111,6 @@ export default function Page() {
   }
 
 
-
-
-
-
   function getKmL() {
     axios.get(`https://api.synsbasen.dk/v1/vehicles/registration/${licensePlate}?expand[]=engine`, {
       headers: {
@@ -115,9 +118,11 @@ export default function Page() {
       }
     })
       .then((response) => {
-        console.log(response.data.data.engine.fuel_efficiency);
+        console.log(response.data.data);
+
         if (response.data.data.engine) {
           setKmL(response.data.data.engine.fuel_efficiency);
+          setFuelType(response.data.data.engine.fuel_type);
           setShowOwnAddress(true);
         } else {
           console.error('No data found');
@@ -146,7 +151,7 @@ export default function Page() {
               className="pr-20 bg-[#1f1f1f] border-[#4b2a7a] focus:border-[#7a4ab2] focus:ring-[#7a4ab2]"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
-              {kmL ? <span>{kmL} km/L</span> : null}
+              {kmL ? <span>{kmL} km/L Fuel Type {fuelType}</span> : null}
             </div>
           </div>
           {showOwnAddress && (
@@ -214,7 +219,6 @@ export default function Page() {
                     </tr>
                   ))}
                 </tbody>
-
               </table>
             </div>
           )}
