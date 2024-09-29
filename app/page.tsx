@@ -68,48 +68,49 @@ export default function Page() {
   }
 
   async function calculateCosts() {
-    // Check if there are at least 2 addresses
-    if (addresses.length < 2) {
-      console.error("At least 2 addresses are needed.");
-      return;
-    }
-
-    setLoading(true);
-
+    // Tjekker om der er mindst 2 adresser (en til afhentning og en til destinationen)
+    if (addresses.length < 2) return;
+  
+    setLoading(true);  // Indikerer at beregningen er i gang
+  
     const distances = [];
     let totalCostPerPerson = [];
     let totalDistanceDriven = 0;
-
-    for (let i = 0; i < addresses.length - 1; i++) { // Iterate excluding the final destination
-      // Calculate the distance from each pickup to the final destination
-      const distanceToDestination = await getDistance(addresses[i], [addresses[addresses.length - 1]]);
-
-      const totalDistanceForPerson = distanceToDestination / 1000; // Convert to km
-
-      totalDistanceDriven += totalDistanceForPerson;
-
-      // Assign initials for the addresses
+  
+    // Loop gennem alle adresser (undtagen destinationen) for at beregne afstande
+    for (let i = 0; i < addresses.length - 1; i++) {
+      const distance = await getDistance(addresses[i], [addresses[addresses.length - 1]]);
+      const totalDistanceForPerson = distance / 1000;  // Konverterer afstand til kilometer
+      totalDistanceDriven += totalDistanceForPerson;   // Holder styr på den samlede kørte distance
+  
+      // Gemmer initialer og distance for hver person
       distances.push({
         initials: initials[i],
         totalDistanceForPerson 
       });
-
-
-      // Calculate the cost for each person based on km/L
+  
+      // Beregner omkostninger for hver person baseret på bilens km/L og brændstofpris
       const litersUsed = totalDistanceForPerson / (kmL || 1);
       const costForPerson = litersUsed * (fuelType === "Benzin" ? fuelPriceBenzin : fuelPriceDiesel);
-
+  
       totalCostPerPerson.push({
         initials: initials[i],
-        cost: costForPerson.toFixed(2) 
+        cost: costForPerson.toFixed(2)  // Runder beløbet af til 2 decimaler
       });
     }
-
+  
+    // Opdaterer state med beregnede distance og omkostninger
     setDistancesPerPerson(distances);
     setTotalCostPerPerson(totalCostPerPerson);
-    setLoading(false);
+    setLoading(false);  // Stopper loading-indikatoren
   }
+  
 
+  function fakeKmL() { // Fake data for testing since the api doesn't work anymore :(
+    setKmL(17.5);
+    setFuelType("Benzin");
+    setShowOwnAddress(true);
+  }
 
   function getKmL() {
     axios.get(`https://api.synsbasen.dk/v1/vehicles/registration/${licensePlate}?expand[]=engine`, {
@@ -118,11 +119,11 @@ export default function Page() {
       }
     })
       .then((response) => {
-        console.log(response.data.data);
+        console.log(response.data);
 
         if (response.data.data.engine) {
-          setKmL(response.data.data.engine.fuel_efficiency);
-          setFuelType(response.data.data.engine.fuel_type);
+          setKmL(17.5);
+          setFuelType("Benzin");
           setShowOwnAddress(true);
         } else {
           console.error('No data found');
@@ -151,7 +152,15 @@ export default function Page() {
               className="pr-20 bg-[#1f1f1f] border-[#4b2a7a] focus:border-[#7a4ab2] focus:ring-[#7a4ab2]"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
-              {kmL ? <span>{kmL} km/L Fuel Type {fuelType}</span> : null}
+              {kmL ? (
+                <span className="flex items-center space-x-2">
+                  <span>{kmL} km/L</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFF">
+                    <path d="M160-120v-640q0-33 23.5-56.5T240-840h240q33 0 56.5 23.5T560-760v280h40q33 0 56.5 23.5T680-400v180q0 17 11.5 28.5T720-180q17 0 28.5-11.5T760-220v-288q-9 5-19 6.5t-21 1.5q-42 0-71-29t-29-71q0-32 17.5-57.5T684-694l-84-84 42-42 148 144q15 15 22.5 35t7.5 41v380q0 42-29 71t-71 29q-42 0-71-29t-29-71v-200h-60v300H160Zm80-440h240v-200H240v200Zm480 0q17 0 28.5-11.5T760-600q0-17-11.5-28.5T720-640q-17 0-28.5 11.5T680-600q0 17 11.5 28.5T720-560ZM240-200h240v-280H240v280Zm240 0H240h240Z"/>
+                  </svg>
+                  <span>{fuelType}</span>
+                </span>
+              ) : null}
             </div>
           </div>
           {showOwnAddress && (
@@ -177,9 +186,6 @@ export default function Page() {
                   )}
                 </div>
               ))}
-
-
-
               <Button
                 type="button"
                 className="w-full bg-[#4b2a7a] text-primary-foreground hover:bg-[#7a4ab2] focus-visible:outline-none"
@@ -189,11 +195,10 @@ export default function Page() {
               </Button>
             </div>
           )}
-
           <Button
             type="button"
             className="w-full bg-[#7a4ab2] text-primary-foreground hover:bg-[#5c3784] focus-visible:outline-none"
-            onClick={showOwnAddress ? calculateCosts : getKmL}
+            onClick={showOwnAddress ? calculateCosts : fakeKmL}
           >
             {loading ? 'Calculating...' : 'Calculate Costs'}
           </Button>
