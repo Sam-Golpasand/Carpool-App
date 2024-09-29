@@ -115,15 +115,15 @@ export default function Page() {
   function getKmL() {
     axios.get(`https://api.synsbasen.dk/v1/vehicles/registration/${licensePlate}?expand[]=engine`, {
       headers: {
-        'Authorization': apiKey
+        'Authorization': "Bearer " + apiKey
       }
     })
       .then((response) => {
         console.log(response.data);
 
         if (response.data.data.engine) {
-          setKmL(17.5);
-          setFuelType("Benzin");
+          setKmL(response.data.data.engine.fuel_efficiency);
+          setFuelType(response.data.data.engine.fuel_type);
           setShowOwnAddress(true);
         } else {
           console.error('No data found');
